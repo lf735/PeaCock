@@ -69,12 +69,15 @@ def block(view: View) -> str:
 
     for r in view.roots():
         emit(r, "  ")
+    for x in view.extra_nodes():
+        out.append(f'  {nid(x["id"])} [label={_q(x["label"])} fillcolor="{x["fill"]}" color="{x["stroke"]}"];')
+        anchors[x["id"]] = ids[x["id"]]
     for e in view.edges():
         a, b = anchors[e.src], anchors[e.dst]
         attrs = [f"label={_q(e.label)}", f'color="{view.edge_color(e)}"', f'fontcolor="{view.edge_color(e)}"']
-        if e.kind == "handle" or e.conditional or (view.test and not e.active):
+        if e.kind in ("handle", "cfg") or e.conditional or (view.test and not e.active):
             attrs.append("style=dashed")
-        if view.by_id[e.src]["id"] in view.kids and view.children(e.src):
+        if e.src in view.kids and view.children(e.src):
             attrs.append(f"ltail=cluster_{ids[e.src]}")
         if view.children(e.dst):
             attrs.append(f"lhead=cluster_{ids[e.dst]}")

@@ -143,14 +143,16 @@ const H={};
   N[hid]={i:{id:hid,name:h.name,role:h.kind==='dut'?'dut':'interface',declared_type:h.type,path:h.name,states:{},ports:[],guards:[],loc:h.loc,class:null,array:null,overridden_in:[]},kids:[],id:hid,kind:'harness'};
 });
 
+N['stim:test']={i:{id:'stim:test',name:'test',role:'test',declared_type:'uvm_test',path:'test',states:{},ports:[],guards:[],loc:null,class:null,array:null,overridden_in:[]},kids:[],id:'stim:test',kind:'stim'};
 const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e};
 const st=(n)=>S.test?(n.i.states[S.test]||{active:true,present:true}):null;
-const isActive=n=>n.kind==='harness'||!S.test||st(n).active;
-const visible=n=>n.kind==='harness'||!(S.hide&&S.test&&!isActive(n));
+const isActive=n=>n.kind==='harness'||n.kind==='stim'||!S.test||st(n).active;
+const visible=n=>n.kind==='harness'||n.kind==='stim'||!(S.hide&&S.test&&!isActive(n));
 const ro=r=>{const k=D.roleOrder.indexOf(r);return k<0?99:k};
 
 function label(n){
   const i=n.i;if(i.id===D.root)return 'uvm_test_top : '+(S.test||'(tous tests)');
+  if(n.kind==='stim')return {name:'test',type:S.test||'(tous tests)'};
   if(n.kind==='harness')return {name:i.name,type:i.declared_type};
   let t=i.declared_type,ov=false;
   if(S.test){const s=st(n);t=s.effective_type||t;ov=s.overridden}else if(i.overridden_in.length){ov=true}
@@ -158,6 +160,7 @@ function label(n){
 }
 
 function style(n){
+  if(n.kind==='stim')return {f:D.colors.test||'#e8d5f5',s:'#6c3483',t:'#000',d:false};
   if(n.kind==='harness'){
     const c=D.colors[n.i.role]||'#e0f2f1';
     return {f:c,s:n.i.role==='dut'?'#512da8':'#00796b',t:'#111',d:false};
@@ -210,13 +213,15 @@ function buildElkGraph(rep){
     if(!vkids.length||S.collapsed.has(n.id)){
       return {id:n.id,width:LW,height:LH};
     }
+    const kids=vkids.map(toElkNode);
+    if(n.id===D.root)kids.unshift({id:'stim:test',width:LW,height:LH});
     return {
       id:n.id,
       layoutOptions:{
         'elk.padding':'[top=34,left=14,bottom=14,right=14]',
         'elk.spacing.nodeNode':'20'
       },
-      children:vkids.map(toElkNode)
+      children:kids
     };
   }
 
@@ -236,6 +241,14 @@ function buildElkGraph(rep){
     let b=rep[r.dst.inst]||rep[dId]||rep['harness:'+r.dst.inst];
     if(!a||!b||a===b)return;
     if(!N[a]||!N[b]||!visible(N[a])||!visible(N[b]))return;
+    const expanded=x=>N[x]&&N[x].kind==='instance'&&!S.collapsed.has(x)&&N[x].kids.some(visible);
+    // l'emetteur 'test' devient un bloc explicite
+    if(a===D.root&&expanded(a))a='stim:test';
+    // pas de fleche entre un conteneur et l'un de ses descendants (fleche fantome sur la bordure)
+    const isAnc=(x,y)=>{let c=N[y]&&N[y].i.parent;while(c){if(c===x)return true;c=N[c]&&N[c].i.parent}return false};
+    if(isAnc(a,b)||isAnc(b,a))return;
+    // vif vers un conteneur deploye : deja represente par ses feuilles
+    if(r.kind==='vif'&&expanded(b))return;
     const key=a+'->'+b+':'+r.label+':'+r.kind;
     if(seenEdges.has(key))return;
     seenEdges.add(key);
@@ -358,6 +371,7 @@ function renderFromLayout(res,rep){
     const g=el('g',{'data-id':n.id,style:'cursor:pointer'},gTarget);
 
     const isSel=S.sel===n.id;
+    el('title',{},g).textContent=`${n.i.path||n.i.name}\n${n.i.role} : ${n.i.declared_type||''}${n.i.loc?'\n'+n.i.loc:''}`;
     const r=el('rect',{
       x:nm.absX,y:nm.absY,width:nm.width,height:nm.height,rx:isLeaf?6:9,
       fill:s.f,stroke:isSel?'#e74c3c':s.s,
@@ -419,7 +433,8 @@ function renderFromLayout(res,rep){
     const col=(S.test&&!e.act)?'#bdbdbd':(D.proto[e.rel.protocol]||D.proto[e.rel.kind]||'#555555');
     const isSelEdge=S.selEdge===e.id;
 
-    const gE=el('g',{class:'edge-group',style:'cursor:pointer'},gEdges);
+    const gE=el('g',{class:'edge-group',style:'cursor:pointer','data-a':srcId,'data-b':dstId},gEdges);
+    el('title',{},gE).textContent=`${e.rel.kind} : ${e.rel.src.inst.replace('inst:','')}${e.rel.src.port?'.'+e.rel.src.port:''} → ${e.rel.dst.inst.replace('inst:','')}${e.rel.dst.port?'.'+e.rel.dst.port:''}${e.rel.label?' ['+e.rel.label+']':''}${e.rel.txn?' txn='+e.rel.txn:''}${(S.test&&!e.act)?' (inactif dans ce test)':''}`;
     el('path',{
       d,fill:'none',stroke:isSelEdge?'#e74c3c':col,
       'stroke-width':isSelEdge?3:1.6,
@@ -449,6 +464,7 @@ function renderFromLayout(res,rep){
     });
   });
 
+  setupHover(gContainers,gLeaves,gEdges);
   document.getElementById('count').textContent=shown+' blocs';
   const totalW=Math.max(res.width+48,600);
   const totalH=Math.max(res.height+48,400);
@@ -456,6 +472,36 @@ function renderFromLayout(res,rep){
   vp.setAttribute('data-h',totalH);
 }
 
+function setupHover(gC,gL,gE){
+  const edges=[...gE.querySelectorAll('.edge-group')];
+  const nodes=[...gC.querySelectorAll('g[data-id]'),...gL.querySelectorAll('g[data-id]')];
+  const byId={};nodes.forEach(g=>byId[g.getAttribute('data-id')]=g);
+  const dim=(g,v)=>g.style.opacity=v;
+  const reset=()=>{edges.forEach(g=>dim(g,1));nodes.forEach(g=>dim(g,1))};
+  nodes.forEach(g=>{
+    const id=g.getAttribute('data-id');
+    g.addEventListener('mouseenter',()=>{
+      const keep=new Set([id]);
+      edges.forEach(eg=>{const a=eg.getAttribute('data-a'),b=eg.getAttribute('data-b');
+        const on=a===id||b===id;dim(eg,on?1:0.08);if(on){keep.add(a);keep.add(b)}});
+      nodes.forEach(n=>{const nid=n.getAttribute('data-id');
+        // un conteneur reste visible s'il est ancêtre d'un nœud conservé
+        const anc=[...keep].some(k=>{let c=N[k]&&N[k].i.parent;while(c){if(c===nid)return true;c=N[c]&&N[c].i.parent}return false});
+        dim(n,(keep.has(nid)||anc||nid===D.root)?1:0.35)});
+    });
+    g.addEventListener('mouseleave',reset);
+  });
+  edges.forEach(eg=>{
+    eg.addEventListener('mouseenter',()=>{
+      const a=eg.getAttribute('data-a'),b=eg.getAttribute('data-b');
+      edges.forEach(o=>dim(o,o===eg?1:0.12));
+      nodes.forEach(n=>{const nid=n.getAttribute('data-id');
+        const anc=[a,b].some(k=>{let c=N[k]&&N[k].i.parent;while(c){if(c===nid)return true;c=N[c]&&N[c].i.parent}return false});
+        dim(n,(nid===a||nid===b||anc||nid===D.root)?1:0.35)});
+    });
+    eg.addEventListener('mouseleave',reset);
+  });
+}
 function countDesc(n){let c=0;(function f(m){m.kids.forEach(k=>{if(visible(k)){c++;f(k)}})})(n);return c}
 
 let vb={x:0,y:0,k:1};

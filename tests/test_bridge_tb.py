@@ -267,3 +267,23 @@ def test_html_elk_layout_execution_headless(res, tmp_path):
     assert 'class="edge-path"' in run.stdout
     assert "JS ERROR" not in run.stdout
 
+
+
+def test_drawio_typed_layers_and_explicit_blocks(res):
+    import xml.dom.minidom as md
+    x = drawio.document(res.arch)
+    doc = md.parseString(x.split("?>", 1)[1])
+    first = doc.getElementsByTagName("diagram")[0]
+    cells = first.getElementsByTagName("mxCell")
+    ids = {c.getAttribute("id") for c in cells}
+    assert {"layer_tlm", "layer_seq", "layer_vif", "layer_cfg", "layer_handle", "ctest"} <= ids
+    edges = [c for c in cells if c.getAttribute("edge") == "1"]
+    parents = {c.getAttribute("parent") for c in edges}
+    assert {"layer_tlm", "layer_seq", "layer_vif"} <= parents
+    for c in edges:                                     # toutes les extrémités existent
+        assert c.getAttribute("source") in ids and c.getAttribute("target") in ids
+
+
+def test_html_hover_and_tooltips(res):
+    page = html.build(res.arch, res.impl)
+    assert "setupHover" in page and "data-a" in page and "'title'" in page

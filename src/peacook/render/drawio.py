@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from xml.sax.saxutils import escape
 
-from .common import View
+from .common import PROTO_COLOR, View, color_of
 
 LEAF_W, LEAF_H, PAD, HEAD, GAP = 170, 46, 14, 30, 16
 
@@ -54,13 +54,76 @@ def page(view: View, base_pos: dict | None = None) -> str:
         for k in kids:
             emit(k, c(i))
 
-    emit(view.env["root"], "1")
-    for k, e in enumerate(view.edges()):
-        dash = "dashed=1;" if (e.kind == "handle" or e.conditional or (view.test and not e.active)) else ""
-        col = view.edge_color(e)
-        cells.append(f'<mxCell id="e{k}" value="{escape(e.label)}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;'
-                     f'strokeColor={col};fontColor={col};{dash}endArrow=block;" edge="1" parent="1" source="{c(e.src)}" target="{c(e.dst)}">'
-                     f'<mxGeometry relative="1" as="geometry"/></mxCell>')
+    root = view.env["root"]
+    emit(root, "1")
+    # --- blocs explicites : test (émetteur de séquences) et harness (interfaces / DUT)
+    test_cell = "ctest"
+    tstyle = (f"rounded=1;whiteSpace=wrap;html=1;fillColor={color_of('test')};strokeColor=#6c3483;fontStyle=1;")
+    cells.append(f'<mxCell id="{test_cell}" value="{escape("test : " + (view.test or "(tous tests)"))}" style="{tstyle}" '
+                 f'vertex="1" parent="1"><mxGeometry x="{-LEAF_W - 90}" y="{-LEAF_H - 40}" width="{LEAF_W}" height="{LEAF_H}" as="geometry"/></mxCell>')
+    hcell: dict[str, str] = {}
+    for k, h in enumerate(view.env.get("harness_nodes", [])):
+        hid = f"h{k}"
+        hcell[h["id"]] = hid
+        fill, stroke = ("#d1c4e9", "#512da8") if h["kind"] == "dut" else ("#e0f2f1", "#00796b")
+        cells.append(f'<mxCell id="{hid}" value="{escape(h["name"] + " : " + str(h["type"]))}" style="rounded=1;whiteSpace=wrap;html=1;'
+                     f'fillColor={fill};strokeColor={stroke};" vertex="1" parent="1"><mxGeometry x="{-LEAF_W - 90}" y="{k * (LEAF_H + 20)}" '
+                     f'width="{LEAF_W}" height="{LEAF_H}" as="geometry"/></mxCell>')
+    # --- calques (un par type de relation) ; config et handles masqués par défaut
+    layers = [("tlm", "TLM", 1), ("seq", "Séquences", 1), ("vif", "Harness / VIF", 1), ("cfg", "Config", 0), ("handle", "Handles", 0)]
+    lid = {}
+    for kind, name, vis in layers:
+        lid[kind] = f"layer_{kind}"
+        cells.append(f'<mxCell id="{lid[kind]}" value="{name}" parent="0"' + ("" if vis else ' visible="0"') + "/>")
+
+    parents: dict[str, str | None] = {i["id"]: i["parent"] for i in view.env["instances"]}
+
+    def is_anc(x, y):
+        cur = parents.get(y)
+        while cur:
+            if cur == x:
+                return True
+            cur = parents.get(cur)
+        return False
+
+    def endpoint(i):
+        if i in hcell:
+            return hcell[i]
+        if i in view.visible:
+            return c(i)
+        return None
+
+    seen = set()
+    for k, r in enumerate(view.env.get("relations", [])):
+        s, d = r["src"]["inst"], r["dst"]["inst"]
+        if r["kind"] not in lid:                        # 'hier' = détail de promotion de ports, non tracé
+            continue
+        if (s not in view.visible and s not in hcell) or (d not in view.visible and d not in hcell):
+            continue
+        act = r["states"][view.test] if view.test else True
+        if view.hide and view.test and not act:
+            continue
+        if s == root and view.children(root):
+            src_cell = test_cell
+        else:
+            src_cell = endpoint(s)
+        dst_cell = endpoint(d)
+        if not src_cell or not dst_cell or src_cell == dst_cell:
+            continue
+        if is_anc(s, d) or is_anc(d, s):
+            continue
+        if r["kind"] == "vif" and d in view.visible and view.children(d):
+            continue
+        key = (src_cell, dst_cell, r["label"], r["kind"])
+        if key in seen:
+            continue
+        seen.add(key)
+        cond = view.test is None and not all(r["states"].values())
+        dash = "dashed=1;" if (r["kind"] in ("handle", "cfg") or cond or (view.test and not act)) else ""
+        col = "#bdbdbd" if (view.test and not act) else PROTO_COLOR.get(r["protocol"], PROTO_COLOR.get(r["kind"], "#555555"))
+        cells.append(f'<mxCell id="e{k}" value="{escape(r["label"] or "")}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;'
+                     f'strokeColor={col};fontColor={col};{dash}endArrow=block;" edge="1" parent="{lid[r["kind"]]}" '
+                     f'source="{src_cell}" target="{dst_cell}"><mxGeometry relative="1" as="geometry"/></mxCell>')
     return "<mxGraphModel><root>" + "".join(cells) + "</root></mxGraphModel>"
 
 

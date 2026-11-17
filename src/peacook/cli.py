@@ -24,9 +24,12 @@ def _common(p: argparse.ArgumentParser):
 
 def _render_args(p: argparse.ArgumentParser):
     from .render.output import ALL_FORMATS, ALL_VIEWS
+    from .render.common import ALL_LAYERS, DEFAULT_LAYERS
     p.add_argument("--views", default=",".join(ALL_VIEWS), help=f"parmi: {','.join(ALL_VIEWS)}")
     p.add_argument("--formats", default=",".join(ALL_FORMATS), help=f"parmi: {','.join(ALL_FORMATS)}")
     p.add_argument("--hide-inactive", action="store_true", help="ne pas afficher les éléments grisés (désactivés)")
+    p.add_argument("--layers", default=",".join(DEFAULT_LAYERS),
+                   help=f"types de relations tracées dans les vues mermaid/dot/svg, parmi: {','.join(ALL_LAYERS)}")
     p.add_argument("--raw", action="store_true", help="connexions hiérarchiques au lieu de bout en bout")
 
 
@@ -92,7 +95,7 @@ def main(argv=None) -> int:
             print(f"modèle écrit dans {out}")
         else:
             files = write_all(res, args.out, _csv(args.views), _csv(args.formats), args.hide_inactive, args.raw,
-                              args.test[0] if args.test and len(args.test) == 1 else None)
+                              args.test[0] if args.test and len(args.test) == 1 else None, _csv(args.layers))
             print(f"{len(files)} fichier(s) écrits dans {args.out}")
         _summary(res.arch)
         return 0
@@ -104,7 +107,7 @@ def main(argv=None) -> int:
         ip = mp.parent.parent / "implementation" / "implementation.json"
         impl = json.loads(ip.read_text(encoding="utf-8")) if ip.exists() else None
         files = write_all(Result(arch, impl, None, None, None), args.out, _csv(args.views),  # type: ignore[arg-type]
-                          _csv(args.formats), args.hide_inactive, args.raw)
+                          _csv(args.formats), args.hide_inactive, args.raw, None, _csv(args.layers))
         print(f"{len(files)} fichier(s) écrits dans {args.out}")
         return 0
 

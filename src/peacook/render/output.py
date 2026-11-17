@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ..pipeline import Result
 from . import drawio, graphviz, html, jsonviews, markdown, mermaid
-from .common import View
+from .common import DEFAULT_LAYERS, View
 
 ALL_VIEWS = ["block", "tree", "classes", "config", "seq", "harness", "tests", "lint", "dataflow"]
 ALL_FORMATS = ["mermaid", "dot", "svg", "html", "drawio", "md", "json"]
@@ -19,7 +19,7 @@ def _w(path: Path, text: str):
 
 
 def write_all(res: Result, out: str, views=None, formats=None, hide_inactive=False, raw=False,
-              only_test: str | None = None) -> list[Path]:
+              only_test: str | None = None, layers=DEFAULT_LAYERS) -> list[Path]:
     views = views or ALL_VIEWS
     formats = formats or ALL_FORMATS
     out_p = Path(out)
@@ -35,7 +35,7 @@ def write_all(res: Result, out: str, views=None, formats=None, hide_inactive=Fal
 
     if "block" in views:
         for t in tests:
-            v = View(arch, t, hide_inactive, raw)
+            v = View(arch, t, hide_inactive, raw, layers)
             suffix = "" if (t is None or not hide_inactive) else ".hidden"
             if "mermaid" in formats:
                 written.append(_w(V / f"block.{v.tag}{suffix}.mmd", mermaid.block(v)))

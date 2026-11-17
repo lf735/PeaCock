@@ -33,11 +33,14 @@ def block(view: View) -> str:
 
     for r in view.roots():
         emit(r, "  ")
+    for x in view.extra_nodes():
+        lines.append(f'  {nid(x["id"])}["{_lbl(x["label"])}"]')
+        styles.append(f"style {nid(x['id'])} fill:{x['fill']},stroke:{x['stroke']}")
     edges = view.edges()
     link_styles = []
     for k, e in enumerate(edges):
         a, b = nid(e.src), nid(e.dst)
-        arrow = "-.->" if (e.kind == "handle" or e.conditional or (view.test and not e.active)) else "-->"
+        arrow = "-.->" if (e.kind in ("handle", "cfg") or e.conditional or (view.test and not e.active)) else "-->"
         lab = _lbl(e.label)
         lines.append(f'  {a} {arrow}|"{lab}"| {b}' if lab else f"  {a} {arrow} {b}")
         link_styles.append(f"linkStyle {k} stroke:{view.edge_color(e)},color:{view.edge_color(e)}")
