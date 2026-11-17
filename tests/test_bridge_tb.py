@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from peacook.pipeline import analyze
-from peacook.render import drawio, graphviz, html, jsonviews, markdown, mermaid
-from peacook.render.common import View
-from peacook.render.output import write_all
+from peacock.pipeline import analyze
+from peacock.render import drawio, graphviz, html, jsonviews, markdown, mermaid
+from peacock.render.common import View
+from peacock.render.output import write_all
 
 FIX = Path(__file__).parent / "fixtures" / "bridge_tb" / "files.f"
 
@@ -287,3 +287,47 @@ def test_drawio_typed_layers_and_explicit_blocks(res):
 def test_html_hover_and_tooltips(res):
     page = html.build(res.arch, res.impl)
     assert "setupHover" in page and "data-a" in page and "'title'" in page
+
+
+def _edge_bin():
+    import shutil
+    edge = shutil.which("msedge") or r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+    return edge if Path(edge).exists() else None
+
+
+@pytest.mark.parametrize("frag", ["", "#test=bridge_passive_test&hide=1", "#dir=DOWN"])
+def test_html_routing_has_no_block_crossing(res, tmp_path, frag):
+    import re, subprocess
+    edge = _edge_bin()
+    if not edge:
+        pytest.skip("msedge introuvable")
+    p = tmp_path / "v.html"
+    p.write_text(html.build(res.arch, res.impl), encoding="utf-8")
+    run = subprocess.run([edge, "--headless", "--disable-gpu", "--dump-dom", f"file:///{p.resolve().as_posix()}{frag}"],
+                         capture_output=True, encoding="utf-8", errors="replace", timeout=60)
+    m = re.search(r'data-crossings="(\d+)"', run.stdout)
+    assert m, "rendu ELK non terminé"
+    assert int(m.group(1)) == 0
+
+
+def test_layers_option_in_mermaid_and_dot(res):
+    base = View(res.arch, None, layers=("tlm",))
+    full = View(res.arch, None, layers=("tlm", "seq", "vif", "cfg", "handle"))
+    assert len(full.edges()) > len(base.edges()) > 0
+    assert {e.kind for e in base.edges()} == {"tlm"}
+    mm = mermaid.block(full)
+    assert "test : (tous tests)" in mm and "apb_vif" in mm
+    dot = graphviz.block(full)
+    assert "test : (tous tests)" in dot and "apb_vif" in dot
+    # aucune arête ne part d'un conteneur vers son descendant
+    for e in full.edges():
+        assert not full._is_anc(e.src, e.dst) and not full._is_anc(e.dst, e.src)
+    assert "apb_vif" not in mermaid.block(base)
+
+
+def test_cli_layers_flag(tmp_path):
+    from peacock.cli import main
+    out = tmp_path / "o"
+    assert main(["all", "-f", str(FIX), "-o", str(out), "--layers", "tlm,cfg", "--formats", "mermaid"]) == 0
+    mm = (out / "architecture/views/block.all.mmd").read_text(encoding="utf-8")
+    assert "apb_vif" not in mm and "-.->" in mm

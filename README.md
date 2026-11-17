@@ -1,8 +1,8 @@
-# PeaCook
+# PeaCock
 
 Extraction d'**architecture** d'environnements UVM (SystemVerilog) → schémas et modèles JSON.
 
-PeaCook analyse statiquement les sources (aucun simulateur requis, via [pyslang](https://pypi.org/project/pyslang/)),
+PeaCock analyse statiquement les sources (aucun simulateur requis, via [pyslang](https://pypi.org/project/pyslang/)),
 interprète symboliquement `new` / `build_phase` / `connect_phase` pour chaque test, et produit :
 
 - une **topologie unique** par environnement (schéma de référence) où les composants activés par une condition sont mis en évidence ;
@@ -22,17 +22,40 @@ Graphviz (`dot`) est optionnel : sans lui, les `.dot` sont générés mais pas l
 
 ```powershell
 # Tout en une commande : filelist .f (+incdir, +define, -f imbriqués) ou scan d'un répertoire
-peacook all -f tests/fixtures/bridge_tb/files.f -o out/bridge
-peacook all -d chemin/vers/env_uvm -o out/mon_env
+peacock all -f tests/fixtures/bridge_tb/files.f -o out/bridge
+peacock all -d chemin/vers/env_uvm -o out/mon_env
 
-peacook scan   -f tb.f -o out/model          # modèle JSON seulement
-peacook render out/model/architecture/architecture.json -o out/vues --formats mermaid,html
-peacook check  -f tb.f --fail-on warning     # lint d'architecture (code de sortie pour la CI)
+peacock scan   -f tb.f -o out/model          # modèle JSON seulement
+peacock render out/model/architecture/architecture.json -o out/vues --formats mermaid,html
+peacock check  -f tb.f --fail-on warning     # lint d'architecture (code de sortie pour la CI)
 ```
 
 Options utiles : `--test T` (limiter à un test), `--hide-inactive` (ne pas afficher les éléments grisés),
 `--raw` (connexions hiérarchiques au lieu de bout en bout), `--views`, `--formats`, `--no-impl`,
 `-I`, `-D`, `--exclude`, `--uvm-home` (vraies macros UVM à la place des stubs), `--max-array-expand`.
+
+`--layers tlm,seq,vif,cfg,handle` choisit les types de relations tracées dans les vues Mermaid / DOT / SVG
+(défaut : `tlm,seq,vif`).
+
+## Relations et schéma
+
+`architecture.json` expose `environment.relations` : un graphe typé, avec pour chacune `states` (actif / grisé par test).
+
+| kind | sens | exemple |
+|---|---|---|
+| `tlm` | connexion TLM bout en bout (+ consommation implicite d'une FIFO) | `mon.ap → sb` |
+| `seq` | séquence lancée sur un séquenceur (`start()` ou `default_sequence` via `config_db`) | `vseqr → apb_agt.sqr` |
+| `vif` | interface du harness vers le DUT et les composants qui la consomment | `apb_vif → drv` |
+| `cfg` | propagation `config_db` | `test → env` |
+| `handle` | référence directe entre composants | `vseqr → sqr` |
+| `hier` | détail de promotion de ports (non tracé) | `mon.ap → agent.ap` |
+
+Règles de dessin communes au viewer HTML, à Mermaid/DOT et à draw.io : le test est un bloc explicite, aucune flèche
+entre un conteneur et son descendant, pas de `vif` vers un conteneur déjà détaillé, une flèche dont une extrémité est
+masquée disparaît.
+
+Le viewer HTML utilise ELK.js (embarqué, licence EPL-2.0, aucun accès réseau) : routage orthogonal, courbé ou direct,
+calques par type de relation, surbrillance et infobulles au survol. `block.drawio` contient un calque par type.
 
 ## Sorties
 

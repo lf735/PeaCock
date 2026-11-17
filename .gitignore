@@ -1,7 +1,38 @@
-.venv/
-out/
-tests/external/
-.peacook_cache/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build / Packaging
+build/
+dist/
 *.egg-info/
+.eggs/
+
+# Tests & Coverage
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Linters & Type checkers
+.mypy_cache/
+.ruff_cache/
+
+# PeaCock outputs & caches
+out/
+.peacock_cache/
+tests/external/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

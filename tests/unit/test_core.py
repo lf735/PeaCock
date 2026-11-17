@@ -1,5 +1,5 @@
-from peacook.extract import textutil as tu
-from peacook.resolve.values import UNKNOWN, Evaluator, Obj, ArrayVal, InstRef, sformatf
+from peacock.extract import textutil as tu
+from peacock.resolve.values import UNKNOWN, Evaluator, Obj, ArrayVal, InstRef, sformatf
 
 
 class _Ctx:
